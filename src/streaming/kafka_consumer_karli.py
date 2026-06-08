@@ -1,4 +1,4 @@
-"""src/streaming/kafka_consumer_case.py.
+"""src/streaming/kafka_consumer_tax_metrics.py.
 
 Kafka consumer: full pipeline example.
 
@@ -87,8 +87,8 @@ ROOT_DIR: Final[Path] = Path.cwd()
 DATA_DIR: Final[Path] = ROOT_DIR / "data"
 OUTPUT_DIR: Final[Path] = DATA_DIR / "output"
 
-OUTPUT_CSV: Final[Path] = OUTPUT_DIR / "consumed_sales_karli.csv"
-OUTPUT_CHART: Final[Path] = OUTPUT_DIR / "sales_chart_karli.png"
+OUTPUT_CSV: Final[Path] = OUTPUT_DIR / "consumed_sales_tax_metrics.csv"
+OUTPUT_CHART: Final[Path] = OUTPUT_DIR / "sales_chart_tax_metrics.png"
 
 REGIONS_CSV: Final[Path] = DATA_DIR / "regions.csv"
 PRODUCTS_CSV: Final[Path] = DATA_DIR / "products.csv"
@@ -331,7 +331,7 @@ def consume_messages(
     axis: Any,
     x_values: list[int],
     y_values: list[float],
-) -> tuple[int, int]:
+) -> tuple[int, int, float]:
     """Consume and process messages from the Kafka topic.
 
     Runs until MAX_MESSAGES is reached or TIMEOUT_SECONDS elapses
@@ -351,7 +351,7 @@ def consume_messages(
         y_values: List of y-axis values already shown.
 
     Returns:
-        A tuple of (consumed_count, skipped_count).
+        A tuple of (consumed_count, skipped_count, total_tax_collected).
     """
     LOG.info("Consuming messages...")
     LOG.info(f"Waiting for up to {MAX_MESSAGES} message(s).")
@@ -359,6 +359,7 @@ def consume_messages(
 
     consumed_count = 0
     skipped_count = 0
+    total_tax_collected = 0.0
 
     while consumed_count + skipped_count < MAX_MESSAGES:
         row = consume_kafka_message(
@@ -399,17 +400,20 @@ def consume_messages(
         )
 
         consumed_count += 1
+        total_tax_collected += enriched["tax_amount"]
+
         LOG.info("MESSAGE ACCEPTED")
         LOG.info(f"order={enriched['order_id']}")
         LOG.info(f"total=${enriched['total']:.2f}")
         LOG.info(f"consumed={consumed_count}")
         LOG.info("RUNNING STATS")
         LOG.info(f"total_sales=${stats.total:,.2f}")
+        LOG.info(f"tax_collected=${total_tax_collected:,.2f}")
         LOG.info(f"average=${stats.mean:,.2f}")
         LOG.info(f"min=${stats.minimum:,.2f}")
         LOG.info(f"max=${stats.maximum:,.2f}")
 
-    return consumed_count, skipped_count
+    return consumed_count, skipped_count, total_tax_collected
 
 
 def save_artifacts(figure: Any) -> None:
@@ -439,6 +443,7 @@ def log_summary(
     consumed_count: int,
     skipped_count: int,
     stats: RunningStats,
+    total_tax_collected: float,
     settings: KafkaSettings,
 ) -> None:
     """Log final summary statistics.
@@ -452,10 +457,11 @@ def log_summary(
     log_path(LOG, "OUTPUT_CHART", OUTPUT_CHART)
 
     if stats.count > 0:
-        LOG.info(f"  Total sales:  ${stats.total:,.2f}")
-        LOG.info(f"  Average sale: ${stats.mean:,.2f}")
-        LOG.info(f"  Minimum sale: ${stats.minimum:,.2f}")
-        LOG.info(f"  Maximum sale: ${stats.maximum:,.2f}")
+        LOG.info(f"  Total sales:   ${stats.total:,.2f}")
+        LOG.info(f"  Tax collected: ${total_tax_collected:,.2f}")
+        LOG.info(f"  Average sale:  ${stats.mean:,.2f}")
+        LOG.info(f"  Minimum sale:  ${stats.minimum:,.2f}")
+        LOG.info(f"  Maximum sale:  ${stats.maximum:,.2f}")
 
     LOG.info("========================")
     LOG.info("Consumer executed successfully!")
@@ -492,6 +498,7 @@ def main() -> None:
 
     consumed_count = 0
     skipped_count = 0
+    total_tax_collected = 0.0
 
     # UPDATED: Use nested try/finally blocks because we have two resources to clean up:
     # - The Kafka consumer should close after consuming messages.
@@ -500,7 +507,7 @@ def main() -> None:
         try:
             # NEW: Updated consume_messages() call
             # includes visualization parameters and logic.
-            consumed_count, skipped_count = consume_messages(
+            consumed_count, skipped_count, total_tax_collected = consume_messages(
                 consumer,
                 region_lookup=region_lookup,
                 stats=stats,
@@ -528,7 +535,13 @@ def main() -> None:
     LOG.info("SECTION E. Exit")
     LOG.info("========================")
 
-    log_summary(consumed_count, skipped_count, stats, settings)
+    log_summary(
+        consumed_count,
+        skipped_count,
+        stats,
+        total_tax_collected,
+        settings,
+    )
 
 
 # === CONDITIONAL EXECUTION GUARD ===
