@@ -59,7 +59,7 @@ from streaming.data_validation.data_contract_case import (
     SALES_REQUIRED_FIELDS,
     validate_required_fields,
 )
-from streaming.visualizations.live_visualizations_case import (
+from streaming.visualizations.live_visualizations_karli import (
     close_live_chart,
     init_live_chart,
     save_live_chart,
@@ -304,15 +304,6 @@ def process_message(
     # Update running statistics with the new total.
     stats.update(enriched["total"])
 
-    # NEW: Update the live chart with the new message.
-    update_live_chart(
-        figure=figure,
-        axis=axis,
-        x_values=x_values,
-        y_values=y_values,
-        message=enriched,
-    )
-
     # NEW: Call the figure.canvas.flush_events() method
     # to process any pending GUI events,
     # which helps the chart to update properly.
@@ -338,8 +329,6 @@ def consume_messages(
     with no new message.
 
     All arguments after the asterisk must be passed as keyword arguments.
-
-    NEW: Updated to include visualization parameters and logic.
 
     Arguments:
         consumer: An open Kafka consumer subscribed to the topic.
@@ -374,8 +363,6 @@ def consume_messages(
 
         LOG.info(row)
 
-        # NEW: Call process_message() with the
-        # new visualization parameters and logic.
         enriched = process_message(
             row,
             region_lookup=region_lookup,
@@ -393,18 +380,31 @@ def consume_messages(
             LOG.warning(f"skipped={skipped_count}")
             continue
 
+        consumed_count += 1
+        total_tax_collected += enriched["tax_amount"]
+        enriched["total_tax_collected"] = total_tax_collected
+
+        update_live_chart(
+            figure=figure,
+            axis=axis,
+            x_values=x_values,
+            y_values=y_values,
+            message=enriched,
+        )
+
+        figure.canvas.flush_events()
+
         append_csv_row(
             path=OUTPUT_CSV,
             row={field: enriched.get(field, "") for field in CONSUMED_FIELDNAMES},
             fieldnames=CONSUMED_FIELDNAMES,
         )
 
-        consumed_count += 1
-        total_tax_collected += enriched["tax_amount"]
-
         LOG.info("MESSAGE ACCEPTED")
         LOG.info(f"order={enriched['order_id']}")
         LOG.info(f"total=${enriched['total']:.2f}")
+        LOG.info(f"tax_amount=${enriched['tax_amount']:.2f}")
+        LOG.info(f"total_tax_collected=${total_tax_collected:,.2f}")
         LOG.info(f"consumed={consumed_count}")
         LOG.info("RUNNING STATS")
         LOG.info(f"total_sales=${stats.total:,.2f}")
