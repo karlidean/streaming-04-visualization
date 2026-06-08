@@ -100,8 +100,7 @@ After you get a copy of this repo in your own GitHub account,
 open a machine terminal in your `Repos` folder:
 
 ```bash
-# Replace username with YOUR GitHub username.
-git clone https://github.com/username/streaming-04-visualization
+git clone https://github.com/karlidean/streaming-04-visualization
 
 cd streaming-04-visualization
 code .
